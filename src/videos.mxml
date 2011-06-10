@@ -4,7 +4,8 @@
 					   xmlns:mx="library://ns.adobe.com/flex/mx"
 					   xmlns:myskins="skins.*"
 	applicationComplete="onAppComplete(event)"
-	xmlns:my="components.*" xmlns:mine="*" currentState="normal" >
+	currentState="normal" 
+	xmlns:my="components.*" xmlns:controls="controls.*" >
 	<s:states>
 		<s:State name="normal" />
 		<s:State name="progress" />
@@ -597,13 +598,13 @@
 			<mx:DataGrid allowMultipleSelection="true" rowHeight="100" showEffect="showEffects" dataProvider="{movies}" id="dataGrid"
 				width="100%" height="100%" headerRelease="dataGrid_headerRelease(event)" visible.progress="false" includeInLayout.progress="false" >
 				<mx:columns>
-					<mx:DataGridColumn itemRenderer="VideoButton" headerText="Title" dataField="subtitle" />
-					<mx:DataGridColumn itemRenderer="CategoryLabel" headerText="Category" resizable="false" dataField="category" />
-					<mx:DataGridColumn itemRenderer="TimeLabel" headerText="Aired" resizable="false"
+					<mx:DataGridColumn itemRenderer="controls.VideoButton" headerText="Title" dataField="subtitle" />
+					<mx:DataGridColumn itemRenderer="controls.CategoryLabel" headerText="Category" resizable="false" dataField="category" />
+					<mx:DataGridColumn itemRenderer="controls.TimeLabel" headerText="Aired" resizable="false"
 						sortCompareFunction="airedSort" sortDescending="true" />
-					<mx:DataGridColumn itemRenderer="SizeLabel" headerText="Size"
+					<mx:DataGridColumn itemRenderer="controls.SizeLabel" headerText="Size"
 						resizable="false" sortCompareFunction="sizeSort" />
-					<mx:DataGridColumn itemRenderer="PreviewImage" headerText="Preview" resizable="false" width="200" />
+					<mx:DataGridColumn itemRenderer="controls.PreviewImage" headerText="Preview" resizable="false" width="200" />
 				</mx:columns>
 			</mx:DataGrid>
 		</s:VGroup>
@@ -612,20 +613,19 @@
 	</s:Panel>
     <s:Panel right="2" top="2" bottom="2" width="289" enabled.credentials="false" borderColor="#554646">
         <s:VGroup width="269" height="100%" verticalAlign="middle" horizontalAlign="center"  paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2">
-	        <mine:HTitle title="Channel:" content="{dataGrid.selectedItem.channel}" />
-	        <mine:HTitle id="movieSize" title="Size:" content="{dataGrid.selectedItem.sizelabel}" />
-	        <mine:HTitle id="movieLength" title="Length:" content="{dataGrid.selectedItem.totaltimestr}" />
+	        <controls:HTitle title="Channel:" content="{dataGrid.selectedItem.channel}" />
+	        <controls:HTitle id="movieSize" title="Size:" content="{dataGrid.selectedItem.sizelabel}" />
+	        <controls:HTitle id="movieLength" title="Length:" content="{dataGrid.selectedItem.totaltimestr}" />
 	        <s:TextArea id="descText" height="100%" editable="false" width="100%"
 	        	text="{dataGrid.selectedItem.description}" verticalScrollPolicy="on" horizontalScrollPolicy="off"  maxHeight="100"/>
-	        <mine:HTitle id="movieStars" title="Stars:" content="{dataGrid.selectedItem.stars}" />
-	        <mine:HTitle title="Record:" content="{dataGrid.selectedItem.record}" />
-	        <mine:HTitle title="Channel:" content="{dataGrid.selectedItem.channel}" />
-	        <mine:HTitle title="Recorder:" content="{dataGrid.selectedItem.host}" />
+	        <controls:HTitle id="movieStars" title="Stars:" content="{dataGrid.selectedItem.stars}" />
+	        <controls:HTitle title="Record:" content="{dataGrid.selectedItem.record}" />
+	        <controls:HTitle title="Channel:" content="{dataGrid.selectedItem.channel}" />
+	        <controls:HTitle title="Recorder:" content="{dataGrid.selectedItem.host}" />
 	        <mx:HRule width="100%"/>
-	        <!--<mine:HTitle id="moviePosted" title="Posted:" />-->
 	        <mx:Spacer height="5%"/>
-	        <mine:HTitle title="Download queue:" content="{download_movies.length} Movie(s)" />
-	        <s:List itemRenderer="MovieProgress" dataProvider="{download_movies}" id="progressList"  width="100%" height="100%" />
+	        <controls:HTitle title="Download queue:" content="{download_movies.length} Movie(s)" />
+	        <s:List itemRenderer="controls.MovieProgress" dataProvider="{download_movies}" id="progressList"  width="100%" height="100%" />
 			<!-- <my:ProgressBar id="progress" width="100%" mode="event" label="" labelPlacement="center" /> -->
 			<s:HGroup width="100%" >
 				<mx:Button label="Download" click="onFileDownload(event);" enabled="{dataGrid.selectedItems.length != 0}" icon="{diskIcon}"/>
@@ -636,7 +636,7 @@
 			<mx:Button id="removeBtn" icon="@Embed(source='/media/icon_addlink.png')" label="Remove"
 				click="onRemoveClick(event)" visible="{superuser}" includeInLayout="{superuser}"/>
 	        <mx:HRule width="100%"/>
-	        <mine:HTitle id="totalSize" title="Total Size:"/>
+	        <controls:HTitle id="totalSize" title="Total Size:"/>
 	        <s:Label id="ver" />
         </s:VGroup>
     </s:Panel>
