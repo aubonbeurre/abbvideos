@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:VGroup xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx" width="388" height="80"
+		 currentState="hold" >
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import components.Movie;
+			
+			import flash.display.DisplayObjectContainer;
+			
+			import mx.collections.ArrayCollection;
+			
+			import spark.components.List;
+
+			[Bindable]
+			public var movie:Movie;
+			
+			[Bindable]
+			public var itemIndex:int;
+			
+			[Bindable]
+			public var listOwner:List;
+			
+			private function onClose(event:Event):void
+			{
+				listOwner.dataProvider.removeItemAt(itemIndex);
+			}
+			
+			private function computeState(kps:String):String
+			{
+				currentState = movie == null ? "hold" : movie.state;
+				return ((currentState == "done" || currentState == "error") ? "Overall Speed: " : "Current Speed: ") + kps;
+			}
+		]]>
+	</fx:Script>
+
+	<s:states>
+		<s:State name="done" />
+		<s:State name="error" />
+		<s:State name="download" />
+		<s:State name="hold" />
+	</s:states>
+	
+	<s:HGroup width="100%" verticalAlign="middle" >
+		<mx:Image source.error="@Embed(source='/icons/emblem-unreadable.png')" source.done="@Embed(source='/icons/face-smile.png')" />
+		<s:Button label="Close"  id="button1" click="onClose(event)"
+				  visible.download="false" includeInLayout.download="false"
+				  visible.hold="false" includeInLayout.hold="false"/>
+		<mx:ProgressBar width="200" labelPlacement="center" source="{movie}" label="{movie.action}"  id="progressbar1"/>
+	</s:HGroup>
+	<s:Label text="Title: {movie.subtitle}" />
+	<s:HGroup width="100%" verticalAlign="middle" >
+		<s:Label text="{computeState(movie.kps)}" id="text1" color.done="#33A343" color.error="#F20909" visible.hold="false"/>
+		<mx:Spacer width="10" />
+		<s:Label text="Elapsed Time: {movie.elapsed}" />
+	</s:HGroup>
+
+</s:VGroup>

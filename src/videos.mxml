@@ -1,0 +1,633 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:WindowedApplication xmlns:fx="http://ns.adobe.com/mxml/2009" 
+					   xmlns:s="library://ns.adobe.com/flex/spark" 
+					   xmlns:mx="library://ns.adobe.com/flex/mx"
+					   xmlns:myskins="skins.*"
+	applicationComplete="onAppComplete(event)"
+	xmlns:my="components.*" xmlns:mine="*" currentState="normal" >
+	<s:states>
+		<s:State name="normal" />
+		<s:State name="progress" />
+		<s:State name="credentials" />
+	</s:states>
+	
+<fx:Script>
+	<![CDATA[
+		import air.update.ApplicationUpdaterUI;
+		import air.update.events.UpdateEvent;
+		
+		import com.adobe.net.MimeTypeMap;
+		import com.adobe.webapis.awss3.AWSS3;
+		import com.adobe.webapis.awss3.AWSS3Event;
+		import com.adobe.webapis.awss3.S3Object;
+		
+		import components.MetaEventDispatcher;
+		import components.Movie;
+		import components.S3;
+		import components.S3Queue;
+		import components.Settings;
+		import components.TopDrawer;
+		import components.User;
+		
+		import mx.collections.ArrayCollection;
+		import mx.controls.Alert;
+		import mx.core.IFlexDisplayObject;
+		import mx.events.CloseEvent;
+		import mx.events.CollectionEvent;
+		import mx.events.DataGridEvent;
+		import mx.events.FlexEvent;
+		import mx.events.ListEvent;
+		import mx.managers.CursorManager;
+		import mx.managers.PopUpManager;
+		import mx.utils.ObjectUtil;
+	
+	[Bindable] private var movies:ArrayCollection = new ArrayCollection();
+	[Bindable] private var categories:ArrayCollection;
+	[Bindable] private var titles:ArrayCollection;
+	[Bindable] private var download_movies:ArrayCollection = new ArrayCollection();
+
+	[Bindable] private var settings:Settings;
+
+	[Bindable]
+	[Embed(source="icons/face-smile.png")]
+	private var smileIcon:Class;
+
+	[Bindable]
+	[Embed(source="icons/emblem-important.png")]
+	private var warningIcon:Class;
+
+	[Bindable]
+	[Embed(source="icons/media-floppy.png")]
+	private var diskIcon:Class;
+
+	[Bindable]
+	[Embed(source="icons/edit-copy.png")]
+	private var copyIcon:Class;
+
+	[Embed(source="icons/dialog-error.png")]
+	private var errorIcon:Class;
+	
+	private var mimeMap:MimeTypeMap;
+
+	[Bindable]
+	private var downloadQueue:S3Queue = new S3Queue(callbackDownload, onError);
+	
+	private var allS3Objects:Vector.<S3Object> = new Vector.<S3Object>();
+
+	[Bindable]
+	private var users:Array = new Array();
+	
+	[Bindable]
+	private var superuser:Boolean = false;
+
+	private var _selected:int;
+	private var gCurrentCol:String;
+    
+	private var credentialsDrawer:TopDrawer;
+
+	[Bindable]
+	public function get selected():int
+    {
+        return _selected;
+    }
+
+	private function callbackDownload (m:Movie):void {
+		m.closeDownloadStream();
+	}
+	
+	private function onError(e:Event):void {
+		trace(e.toString());
+		
+		if(e is IOErrorEvent)
+			Alert.show("A network error occurred.  The error ID is: " + (e as IOErrorEvent).errorID + " " + e.toString(), "Network Error", Alert.OK, null, null, errorIcon);
+		else if(e is AWSS3Event) {
+			if ((e as AWSS3Event).data != null)
+				Alert.show(String((e as AWSS3Event).data), "S3 Error", Alert.OK, null, null, errorIcon);
+			else
+				Alert.show("An unknown S3 error has occurred.", "S3 Error", Alert.OK, null, null, errorIcon);
+		} else {
+			Alert.show("An unknown error has occurred: " + e.toString(), "Unknown Error", Alert.OK, null, null, errorIcon);
+		}
+		removeBusy();
+	}
+
+	public function set selected(value:int):void
+    {
+        _selected = value;
+        
+        if(value >= 0)
+        {
+        	descText.text = dataGrid.selectedItem.description;
+        	movieSize.content = dataGrid.selectedItem.sizestr;
+        	movieLength.content = dataGrid.selectedItem.timestr;
+        	//moviePosted.content = dataGrid.selectedItem.postedtimestr;
+        	if(dataGrid.selectedItem.stars != "0.0")
+        		movieStars.content = (Number(dataGrid.selectedItem.stars) * 5.0).toString();
+        	else
+	         	movieStars.content = "";
+        }
+        else
+        {
+        	descText.text = "";
+        	movieSize.content = "";
+        	movieLength.content = "";
+        	movieStars.content = "";
+        	//moviePosted.content = "";
+        }
+   }
+	
+	private function declaredBy_filterFunc(item:Movie):Boolean {
+		if(comboCategories.selectedItem && comboCategories.selectedItem.value != "All") {
+			if(item.category != String(comboCategories.selectedItem.value))
+				return false;
+		}
+		if(comboTitles.selectedItem && comboTitles.selectedItem.value != "All") {
+			if(item.title != String(comboTitles.selectedItem.value))
+				return false;
+		}
+		if(searchInput.text != "") {
+			var reg:RegExp = new RegExp(searchInput.text, "i");
+			if(!reg.exec(item.subtitle))
+				return false;
+		}
+		
+		if(iPodOnly.selected && item.itouch != "g5")
+			return false;
+		
+		if(hdtvOnly.selected && item.ipod != "appletv")
+			return false;
+		
+	    return true;
+	}
+	
+	public function onFilterChange(event:Event):void {
+		movies.refresh();
+	}
+
+	public function onClearFilters(event:Event):void {
+		searchInput.text = "";
+		comboTitles.selectedIndex = 0;
+		comboCategories.selectedIndex = 0;
+		iPodOnly.selected = false;
+		hdtvOnly.selected = false;
+		
+		onFilterChange(event);
+	}
+	
+	private function onCollectionChange(event:CollectionEvent):void {
+		numAssetsLabel.text = String(movies.length) + " Movie(s) Selected";
+		if(comboCategories.selectedItem) {
+			clearFiltersBtn.enabled = searchInput.text != "" || comboTitles.selectedItem.value != "All" ||
+				comboCategories.selectedItem.value != "All" || iPodOnly.selected || hdtvOnly.selected;
+		}
+
+		var total:Number = 0;
+		for each(var item:Movie in movies) {
+			total += item.mp4.size;
+		}
+		totalSize.content = Movie.size_labelFunc(total);
+	}
+	
+
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	// Instantiate the updater
+		private var appUpdater:ApplicationUpdaterUI = new ApplicationUpdaterUI();
+	
+		private function checkForUpdate():void {
+			// The code below is a hack to work around a bug in the framework so that CMD-Q still works on MacOS
+			// This is a temporary fix until the framework is updated
+			// See http://www.adobe.com/cfusion/webforums/forum/messageview.cfm?forumid=72&catid=670&threadid=1373568
+			NativeApplication.nativeApplication.addEventListener( Event.EXITING, 
+				function(e:Event):void {
+					var opened:Array = NativeApplication.nativeApplication.openedWindows;
+					for (var i:int = 0; i < opened.length; i ++) {
+						opened[i].close();
+					}
+			});	
+	
+			setApplicationVersion(); // Find the current version so we can show it below
+			
+			// Configuration stuff - see update framework docs for more details
+			appUpdater.updateURL = "http://abb.podzone.net/update.xml"; // Server-side XML file describing update
+			appUpdater.isCheckForUpdateVisible = false; // We won't ask permission to check for an update
+			appUpdater.addEventListener(UpdateEvent.INITIALIZED, onUpdate); // Once initialized, run onUpdate
+			appUpdater.addEventListener(ErrorEvent.ERROR, onUpdateError); // If something goes wrong, run onError
+			appUpdater.initialize(); // Initialize the update framework
+		}
+	
+		private function onUpdateError(event:ErrorEvent):void {
+			Alert.show(event.toString());
+		}
+		
+		private function onUpdate(event:UpdateEvent):void {
+			appUpdater.checkNow(); // Go check for an update now
+		}
+
+	// Find the current version for our Label below
+		private function setApplicationVersion():void {
+			var appXML:XML = NativeApplication.nativeApplication.applicationDescriptor;
+			var ns:Namespace = appXML.namespace();
+			ver.text = "Current version is " + appXML.ns::version;
+		}
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	private function findAppStorage(filename:String):File {
+		var f:File = File.applicationStorageDirectory.resolvePath(filename);
+		return f.exists ? f : null;
+	}
+
+
+	private function onAddMovie(movie:Movie):void {
+		movies.addItem(movie);
+		
+		categories = Movie.getCategories(movies.toArray());
+		titles = Movie.getTitles(movies.toArray());
+
+		if(movies.length == 1) {
+			comboCategories.selectedIndex = 0;
+			comboTitles.selectedIndex = 0;
+			movies.filterFunction = declaredBy_filterFunc;
+			onFilterChange(null);
+			dataGrid.selectedIndex = 0;
+			removeBusy();
+			
+			dataGrid.dispatchEvent(new DataGridEvent(	DataGridEvent.HEADER_RELEASE,	false,	true, 2,	// The zero-based index of the column to sort in the DataGrid object's columns array.
+						null, 0, null, null, 0	));
+		}
+
+		var pngFile:File = findAppStorage(movie.png.key);
+		if(!pngFile) {
+			var s3:S3 = new S3();
+			s3.addEventListener(AWSS3Event.OBJECT_RETRIEVED, function (e:AWSS3Event):void {
+				var tmp:File = File.applicationStorageDirectory.resolvePath(e.data.key);
+				var fs:FileStream = new FileStream();
+				fs.open(tmp, FileMode.WRITE);
+				fs.writeBytes(e.data.bytes);
+				fs.close();
+				movie.thumbnail = tmp.url;
+			});
+			for each(var err:String in S3.s3errors) {
+				s3.addEventListener(err, function(e:Event): void {
+					onError(e);
+				});
+			}
+			s3.getObject("aubonbeurre", movie.png.key);
+		} else {
+			movie.thumbnail = pngFile.url;
+		}
+	}
+
+	private function onReloadAubonbeurre():void {
+		var app:WindowedApplication = this;
+		movies = new ArrayCollection();
+		movies.addEventListener(CollectionEvent.COLLECTION_CHANGE, onCollectionChange);
+		
+		download_movies = new ArrayCollection();
+		allS3Objects = new Vector.<S3Object>();
+		setBusy();
+
+		var s3:S3 = new S3();
+		for each(var err:String in S3.s3errors) {
+			s3.addEventListener(err, function(e:Event): void {
+				onError(e);
+			});
+		}
+		
+		var get_objects:Function = function (e:AWSS3Event):void {
+			var o:S3Object;
+			var err:String;
+			for each(o in e.data) {
+				allS3Objects.push(o);
+			}
+			
+			// does not work
+			if(0 && e.data.length) {
+				var s3_parts:S3 = new S3();
+				for each(var err:String in S3.s3errors) {
+					s3_parts.addEventListener(err, function(e:Event): void {
+						onError(e);
+					});
+				}
+				s3_parts.addEventListener(AWSS3Event.LIST_OBJECTS, get_objects);
+
+				s3_parts.listObjects("aubonbeurre", null, allS3Objects[allS3Objects.length-1].key); // marker
+				return;
+			}
+			
+			var credentialObj:S3Object = Movie.getCredentialS3Object(allS3Objects);
+			if(credentialObj == null) {
+				Alert("Problem loading the credentials");
+				exit();
+			}
+			// load the credentials
+			var s3_cred:S3 = new S3();
+			for each(err in S3.s3errors) {
+				s3_cred.addEventListener(err, function(e:Event): void {
+					onError(e);
+				});
+			}
+			
+			s3_cred.addEventListener(AWSS3Event.OBJECT_RETRIEVED, function (e:AWSS3Event):void {
+				users = User.parseCredentials(e.data);
+				if(users == null || users.length == 0) {
+					Alert("Problem parsing the credentials");
+					exit();
+				}
+				credentialsDrawer = PopUpManager.createPopUp(app, TopDrawer, true) as TopDrawer;
+				credentialsDrawer.settings = settings;
+				credentialsDrawer.users = users;
+				
+				credentialsDrawer.addEventListener(FlexEvent.CREATION_COMPLETE, function(e:FlexEvent):void {
+					PopUpManager.centerPopUp(credentialsDrawer);
+				});
+				
+				this.currentState = "credentials";
+				
+				credentialsDrawer.addEventListener("login_ok", function(e:Event):void {
+					this.currentState = "normal";
+					superuser = credentialsDrawer.superuser;
+					PopUpManager.removePopUp(credentialsDrawer);
+				});
+				credentialsDrawer.addEventListener("login_abort", function(e:Event):void {
+					exit();
+				});
+			});
+			if(users == null || users.length == 0)
+				s3_cred.getObject("aubonbeurre", credentialObj.key);
+			
+			// load the listings
+			var listingAr:Vector.<S3Object> = Movie.getAllValidTxt(allS3Objects);
+			for each(o in listingAr) {
+				var txtFile:File = findAppStorage(o.key);
+				if(!txtFile) {
+					var s3_txt:S3 = new S3();
+					for each(err in S3.s3errors) {
+						s3_txt.addEventListener(err, function(e:Event): void {
+							onError(e);
+						});
+					}
+					s3_txt._o = o;
+					s3_txt.addEventListener(AWSS3Event.OBJECT_RETRIEVED, function (e:AWSS3Event):void {
+						var o:S3Object = e.currentTarget._o;
+						var tmp:File = File.applicationStorageDirectory.resolvePath(o.key);
+						var fs:FileStream = new FileStream();
+						fs.open(tmp, FileMode.WRITE);
+						fs.writeBytes(e.data.bytes);
+						fs.close();
+						
+						var movie:Movie = new Movie(o, tmp, allS3Objects);
+						onAddMovie(movie);
+					});
+					s3_txt.getObject("aubonbeurre", o.key);
+				} else {
+					var movie:Movie = new Movie(o, txtFile, allS3Objects);
+					onAddMovie(movie);
+				}
+			}
+		}
+
+		s3.addEventListener(AWSS3Event.LIST_OBJECTS, get_objects);
+		s3.listObjects("aubonbeurre");
+	}
+	
+	private function _pushDownload(m:Movie):void {
+		downloadQueue.download_stream(m);
+		if(!download_movies.contains(m)) {
+			download_movies.addItem(m);
+		}
+    	var index:int = download_movies.getItemIndex(m);
+		//progressList.scrollToIndex(index);
+		progressList.selectedIndex = index;
+	}
+	
+	private function pushDownload(m:*):void {
+		var o:Movie;
+		if(m is Movie) {
+			for each(o in downloadQueue.queue()) {
+				if(o.txt.key == m.txt.key)
+					return;
+			}
+			_pushDownload(m as Movie);
+		} else {
+			var mov:Array = m as Array;
+			for each(var a:Movie in mov) {
+				var add:Boolean = true;
+				for each(o in downloadQueue.queue()) {
+					if(o.txt.key == a.txt.key) {
+						add = false;
+						break;
+					}
+				}
+				if(add) {
+					_pushDownload(a);
+				}
+			}
+		}
+	}
+
+	private function onClickDownload(evt:Event):void
+	{
+		var f:File = File.documentsDirectory.resolvePath(dataGrid.selectedItem.filename);
+		f.addEventListener(Event.SELECT,
+			function(e:Event):void
+			{
+				dataGrid.selectedItem.downloadLocation = f;
+				pushDownload(dataGrid.selectedItem);
+			});
+			
+		f.browseForSave("Choose a save location.");
+	}
+	
+	private function onClickBrowse(evt:Event):void {
+		if (dataGrid.selectedItems.length == 0) return;
+
+		var m:Movie = dataGrid.selectedItem as Movie;
+		//addr += m.mp4.key;
+		//var u:URLRequest = new URLRequest(addr);
+        //navigateToURL(u,"_blank"); 
+        
+        var s3:S3 = new S3();
+		var url:String = s3.getTemporaryObjectURL("aubonbeurre", m.mp4.key, 3600 * 24 * 10);
+		
+		Alert.show("curl '" + url + "' > '" + m.filename + "'");
+	}
+	
+	
+
+	private function onFileDownload(evt:Event):void
+	{
+		if (dataGrid.selectedItems.length == 0) return;
+		var f:File = new File();
+		f.addEventListener(Event.SELECT,
+			function(e:Event):void
+			{
+				for each(var a:Movie in dataGrid.selectedItems) {
+					a.downloadLocation = f;
+				}
+				pushDownload(dataGrid.selectedItems);
+			});
+		f.browseForDirectory("Choose a save location.");
+	}
+
+	private function setBusy():void
+	{
+		currentState = "progress";
+		CursorManager.setBusyCursor();
+	}
+
+	private function removeBusy():void
+	{
+		currentState = "normal";
+		CursorManager.removeBusyCursor();
+	}
+	
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	public function onAppComplete(event:Event):void {
+		checkForUpdate();
+		
+		settings = new Settings();
+		
+		// Set up the mimetype map
+		mimeMap = new MimeTypeMap();
+	
+		dataGrid.addEventListener("clickBtn", onClickDownload);
+			
+		// Initialize data providers
+		categories = new ArrayCollection();
+		titles = new ArrayCollection();
+		
+		onReloadAubonbeurre();
+	}
+
+	private function dataGrid_headerRelease(evt:DataGridEvent):void {
+		gCurrentCol = dataGrid.columns[evt.columnIndex].dataField;
+	}
+
+	private function sizeSort(itemA:Movie, itemB:Movie):int {
+		var a:Number = itemA.mp4.size;
+		var b:Number = itemB.mp4.size;
+		return ObjectUtil.numericCompare(a, b);
+	}
+
+	private function airedSort(itemA:Movie, itemB:Movie):int {
+		var a:Number = itemA.starttime.getTime();
+		var b:Number = itemB.starttime.getTime();
+		return ObjectUtil.numericCompare(a, b);
+	}
+
+	private function onRemoveClick(event:Event):void {
+		Alert.show("Are you sure you want to delete the selected object" + ((dataGrid.selectedItems.length > 1) ? "s" : "") + "?",
+				   "Confirm", Alert.NO|Alert.YES,
+				   null,
+				   function(e:CloseEvent):void {
+				   		if(e.detail == Alert.YES) {
+							setBusy();
+							
+							var mev:MetaEventDispatcher = new MetaEventDispatcher([AWSS3Event.OBJECT_DELETED,], S3.s3errors);
+
+							mev.addEventListener(AWSS3Event.OBJECT_DELETED, function (e:Event):void {
+								removeBusy();
+								
+								onReloadAubonbeurre();
+							});
+							for each(var err:String in S3.s3errors) {
+								mev.addEventListener(err, function(e:Event): void {
+									onError(e);
+								});
+							}
+
+							for each(var a:Movie in dataGrid.selectedItems) {
+								var s3:S3 = new S3();
+								s3.delete_movie(a);
+								mev.add_target(s3);
+							}
+				   		}
+				   	},
+				   warningIcon);
+	}
+
+	]]>
+</fx:Script>
+
+	<fx:Style source="css.css"/>
+
+	<fx:Binding source="dataGrid.selectedIndex" destination="selected" />
+	
+	<fx:Declarations>
+		<mx:Parallel id="showEffects">
+			<mx:WipeRight duration="1000"/>
+			<mx:Fade alphaFrom="0" alphaTo="1" duration="1000"/>
+		</mx:Parallel>
+
+		<mx:Parallel id="hideEffects">
+			<mx:Fade alphaFrom="1" alphaTo="0" duration="1000"/>
+			<mx:WipeLeft duration="1000"/>
+		</mx:Parallel>
+	</fx:Declarations>
+  
+  	<s:Panel right="299" bottom="2" top="2" left="2" enabled.credentials="false" borderColor="#554646">
+		<s:VGroup x="0" y="0" width="100%" height="100%" paddingLeft="2" paddingRight="2" paddingTop="2" paddingBottom="2">
+			<s:HGroup x="0" y="0" width="100%" verticalAlign="middle">
+				<s:Label text="Titles:" />
+				<s:ComboBox id="comboTitles" dataProvider="{titles}" labelField="name" change="onFilterChange(event)" ></s:ComboBox>
+				<s:Label text="Categories:" />
+				<s:ComboBox id="comboCategories" dataProvider="{categories}" labelField="name" change="onFilterChange(event)" ></s:ComboBox>
+			</s:HGroup>
+			<s:HGroup x="0" y="0" width="100%" verticalAlign="middle">
+				<s:Label text="Search:" />
+				<s:TextInput id="searchInput" change="onFilterChange(event)" />
+				<s:Button label="Clear Filters" id="clearFiltersBtn" color="#EA043F" enabled="false" click="onClearFilters(event)" />
+				<s:Label id="numAssetsLabel"/>
+				<s:CheckBox id="iPodOnly" label="iPod Only" click="onFilterChange(event)" />
+				<s:CheckBox id="hdtvOnly" label="HDTV Only" click="onFilterChange(event)" />
+			</s:HGroup>
+			<mx:DataGrid allowMultipleSelection="true" rowHeight="100" showEffect="showEffects" dataProvider="{movies}" id="dataGrid"
+				width="100%" height="100%" headerRelease="dataGrid_headerRelease(event)" visible.progress="false" includeInLayout.progress="false" >
+				<mx:columns>
+					<mx:DataGridColumn itemRenderer="VideoButton" headerText="Title" dataField="subtitle" />
+					<mx:DataGridColumn itemRenderer="CategoryLabel" headerText="Category" resizable="false" dataField="category" />
+					<mx:DataGridColumn itemRenderer="TimeLabel" headerText="Aired" resizable="false"
+						sortCompareFunction="airedSort" sortDescending="true" />
+					<mx:DataGridColumn itemRenderer="SizeLabel" headerText="Size"
+						resizable="false" sortCompareFunction="sizeSort" />
+					<mx:DataGridColumn itemRenderer="PreviewImage" headerText="Preview" resizable="false" width="200" />
+				</mx:columns>
+			</mx:DataGrid>
+		</s:VGroup>
+		<mx:ProgressBar hideEffect="hideEffects" id="progressBar" labelPlacement="center"
+			horizontalCenter="-12" verticalCenter="-14" indeterminate="true" visible.normal="false" includeInLayout.normal="false" />
+	</s:Panel>
+    <s:Panel right="2" top="2" bottom="2" width="289" enabled.credentials="false" borderColor="#554646">
+        <s:VGroup width="269" height="100%" verticalAlign="middle" horizontalAlign="center"  paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2">
+	        <mine:HTitle title="Channel:" content="{dataGrid.selectedItem.channel}" />
+	        <mine:HTitle id="movieSize" title="Size:" content="{dataGrid.selectedItem.sizelabel}" />
+	        <mine:HTitle id="movieLength" title="Length:" content="{dataGrid.selectedItem.totaltimestr}" />
+	        <s:TextArea id="descText" height="100%" editable="false" width="100%"
+	        	text="{dataGrid.selectedItem.description}" verticalScrollPolicy="on" horizontalScrollPolicy="off"  maxHeight="100"/>
+	        <mine:HTitle id="movieStars" title="Stars:" content="{dataGrid.selectedItem.stars}" />
+	        <mine:HTitle title="Record:" content="{dataGrid.selectedItem.record}" />
+	        <mine:HTitle title="Channel:" content="{dataGrid.selectedItem.channel}" />
+	        <mine:HTitle title="Recorder:" content="{dataGrid.selectedItem.host}" />
+	        <mx:HRule width="100%"/>
+	        <!--<mine:HTitle id="moviePosted" title="Posted:" />-->
+	        <mx:Spacer height="5%"/>
+	        <mine:HTitle title="Download queue:" content="{download_movies.length} Movie(s)" />
+	        <s:List itemRenderer="MovieProgress" dataProvider="{download_movies}" id="progressList"  width="100%" height="100%" />
+			<!-- <my:ProgressBar id="progress" width="100%" mode="event" label="" labelPlacement="center" /> -->
+			<s:HGroup width="100%" >
+				<mx:Button label="Download" click="onFileDownload(event);" enabled="{dataGrid.selectedItems.length != 0}" icon="{diskIcon}"/>
+		        <mx:Spacer width="100%"/>
+				<mx:Button label="Browse" click="onClickBrowse(event);" enabled="{dataGrid.selectedItems.length != 0}" icon="{copyIcon}"/>				
+			</s:HGroup>
+			<mx:Button label="Reload" click="onReloadAubonbeurre()" icon="@Embed(source='/icons/edit-undo.png')" />
+			<mx:Button id="removeBtn" icon="@Embed(source='/media/icon_addlink.png')" label="Remove"
+				click="onRemoveClick(event)" visible="{superuser}" includeInLayout="{superuser}"/>
+	        <mx:HRule width="100%"/>
+	        <mine:HTitle id="totalSize" title="Total Size:"/>
+	        <s:Label id="ver" />
+        </s:VGroup>
+    </s:Panel>
+    
+</s:WindowedApplication>

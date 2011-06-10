@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		   xmlns:s="library://ns.adobe.com/flex/spark" 
+		   xmlns:mx="library://ns.adobe.com/flex/mx"
+			borderVisible="true" dropShadowVisible="true" height="140" width="300" title="ABBVideos">
+	<fx:Metadata>
+		[Event(login_ok)]
+		[Event(login_abort)]
+	</fx:Metadata>
+	
+	<s:layout>
+		<s:VerticalLayout horizontalAlign="left" paddingBottom="2" paddingLeft="2" paddingRight="2" paddingTop="2" />
+	</s:layout>
+	
+	<fx:Script>
+	<![CDATA[
+		import mx.core.UIComponent;
+		import mx.managers.PopUpManager;
+		
+		[Bindable] public var settings:Settings;
+		[Bindable] public var users:Array;
+		[Bindable] public var superuser:Boolean = false;
+	
+		private function checkLoginPassword():void {
+			var gotIt:Boolean = false;
+			
+			settings.setsetting("username", loginName.text);
+			settings.setsetting("password", passwd.text);
+			
+			for each(var user:User in users) {
+				if(user.name == loginName.text && user.passwd == passwd.text) {
+					gotIt = true;
+					superuser = user.root;
+					break;
+				}
+			}
+			
+			if(gotIt) {
+				this.dispatchEvent(new Event("login_ok"));
+			}
+		}
+		
+		private function cancel():void {
+			this.dispatchEvent(new Event("login_abort"));
+		} 
+	]]>
+	</fx:Script>
+
+	<s:HGroup verticalAlign="middle" width="100%">
+		<s:Label fontWeight="bold" text="Login:"/>						
+		<s:TextInput id="loginName" text="{settings.username}" width="100%"/>
+	</s:HGroup>
+	<s:HGroup verticalAlign="middle" width="100%">
+		<s:Label fontWeight="bold" text="Password:"/>
+		<s:TextInput id="passwd" text="{settings.password}" width="100%" displayAsPassword="true"/>
+	</s:HGroup>
+	<mx:HRule height="100%" width="100%" />
+	<s:HGroup verticalAlign="middle" horizontalAlign="right" width="100%">
+		<s:Button label="Login" click="checkLoginPassword()" enabled="true" x="190" y="67"/>
+		<s:Button label="Cancel" click="cancel()" x="112" y="67"/>
+	</s:HGroup>
+</s:TitleWindow>
+

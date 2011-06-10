@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:MXDataGridItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+						  xmlns:s="library://ns.adobe.com/flex/spark" 
+						  xmlns:mx="library://ns.adobe.com/flex/mx" 
+						  focusEnabled="true">
+	<s:layout>
+		<s:HorizontalLayout verticalAlign="middle" horizontalAlign="center"
+							paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	<s:Label id="lblData" text="{data.sizelabel}" />
+</s:MXDataGridItemRenderer>

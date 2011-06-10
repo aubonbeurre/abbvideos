@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:ItemRenderer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+				xmlns:s="library://ns.adobe.com/flex/spark" 
+				xmlns:mx="library://ns.adobe.com/flex/mx" 
+				autoDrawBackground="true" xmlns:local="*" dataChange="itemrenderer1_dataChangeHandler(event)">
+	<s:layout>
+		<s:VerticalLayout paddingLeft="2" paddingRight="2"
+						  paddingTop="2" paddingBottom="2"/>
+	</s:layout>
+	<fx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			
+			import spark.components.List;
+
+			protected function itemrenderer1_dataChangeHandler(event:FlexEvent):void
+			{
+				ctrl.listOwner = owner as List;
+			}
+
+		]]>
+	</fx:Script>
+
+	<local:MovieProgressCtrl id="ctrl" movie="{data as Movie}" itemIndex="{itemIndex}" />
+</s:ItemRenderer>
