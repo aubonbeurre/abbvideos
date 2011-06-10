@@ -29,6 +29,8 @@
 		import components.TopDrawer;
 		import components.User;
 		
+		import login.LoginForm;
+		
 		import mx.collections.ArrayCollection;
 		import mx.controls.Alert;
 		import mx.core.IFlexDisplayObject;
@@ -37,6 +39,7 @@
 		import mx.events.DataGridEvent;
 		import mx.events.FlexEvent;
 		import mx.events.ListEvent;
+		import mx.events.ResizeEvent;
 		import mx.managers.CursorManager;
 		import mx.managers.PopUpManager;
 		import mx.utils.ObjectUtil;
@@ -209,7 +212,7 @@
 			setApplicationVersion(); // Find the current version so we can show it below
 			
 			// Configuration stuff - see update framework docs for more details
-			appUpdater.updateURL = "http://abb.podzone.net/update.xml"; // Server-side XML file describing update
+			appUpdater.updateURL = "http://aubonbeurre.github.com/abbvideos/update.xml"; // Server-side XML file describing update
 			appUpdater.isCheckForUpdateVisible = false; // We won't ask permission to check for an update
 			appUpdater.addEventListener(UpdateEvent.INITIALIZED, onUpdate); // Once initialized, run onUpdate
 			appUpdater.addEventListener(ErrorEvent.ERROR, onUpdateError); // If something goes wrong, run onError
@@ -272,13 +275,13 @@
 					onError(e);
 				});
 			}
-			s3.getObject("aubonbeurre", movie.png.key);
+			s3.getObject(S3.mybucket, movie.png.key);
 		} else {
 			movie.thumbnail = pngFile.url;
 		}
 	}
 
-	private function onReloadAubonbeurre():void {
+	private function onReload():void {
 		var app:WindowedApplication = this;
 		movies = new ArrayCollection();
 		movies.addEventListener(CollectionEvent.COLLECTION_CHANGE, onCollectionChange);
@@ -299,20 +302,6 @@
 			var err:String;
 			for each(o in e.data) {
 				allS3Objects.push(o);
-			}
-			
-			// does not work
-			if(0 && e.data.length) {
-				var s3_parts:S3 = new S3();
-				for each(var err:String in S3.s3errors) {
-					s3_parts.addEventListener(err, function(e:Event): void {
-						onError(e);
-					});
-				}
-				s3_parts.addEventListener(AWSS3Event.LIST_OBJECTS, get_objects);
-
-				s3_parts.listObjects("aubonbeurre", null, allS3Objects[allS3Objects.length-1].key); // marker
-				return;
 			}
 			
 			var credentialObj:S3Object = Movie.getCredentialS3Object(allS3Objects);
@@ -354,7 +343,7 @@
 				});
 			});
 			if(users == null || users.length == 0)
-				s3_cred.getObject("aubonbeurre", credentialObj.key);
+				s3_cred.getObject(S3.mybucket, credentialObj.key);
 			
 			// load the listings
 			var listingAr:Vector.<S3Object> = Movie.getAllValidTxt(allS3Objects);
@@ -379,7 +368,7 @@
 						var movie:Movie = new Movie(o, tmp, allS3Objects);
 						onAddMovie(movie);
 					});
-					s3_txt.getObject("aubonbeurre", o.key);
+					s3_txt.getObject(S3.mybucket, o.key);
 				} else {
 					var movie:Movie = new Movie(o, txtFile, allS3Objects);
 					onAddMovie(movie);
@@ -388,7 +377,7 @@
 		}
 
 		s3.addEventListener(AWSS3Event.LIST_OBJECTS, get_objects);
-		s3.listObjects("aubonbeurre");
+		s3.listObjects(S3.mybucket);
 	}
 	
 	private function _pushDownload(m:Movie):void {
@@ -448,7 +437,7 @@
         //navigateToURL(u,"_blank"); 
         
         var s3:S3 = new S3();
-		var url:String = s3.getTemporaryObjectURL("aubonbeurre", m.mp4.key, 3600 * 24 * 10);
+		var url:String = s3.getTemporaryObjectURL(S3.mybucket, m.mp4.key, 3600 * 24 * 10);
 		
 		Alert.show("curl '" + url + "' > '" + m.filename + "'");
 	}
@@ -498,7 +487,7 @@
 		categories = new ArrayCollection();
 		titles = new ArrayCollection();
 		
-		onReloadAubonbeurre();
+		showLogin();
 	}
 
 	private function dataGrid_headerRelease(evt:DataGridEvent):void {
@@ -530,7 +519,7 @@
 							mev.addEventListener(AWSS3Event.OBJECT_DELETED, function (e:Event):void {
 								removeBusy();
 								
-								onReloadAubonbeurre();
+								onReload();
 							});
 							for each(var err:String in S3.s3errors) {
 								mev.addEventListener(err, function(e:Event): void {
@@ -547,6 +536,28 @@
 				   	},
 				   warningIcon);
 	}
+
+		private function showLogin():void {
+			// Create a non-modal TitleWindow container.
+			var thisapp:WindowedApplication = this;
+			
+			var onResize:Function = function(e:ResizeEvent):void {
+				PopUpManager.centerPopUp(loginWindow);
+			};
+			
+			var loginWindow:LoginForm =
+				PopUpManager.createPopUp(this, LoginForm, true) as LoginForm;
+			loginWindow.addEventListener(FlexEvent.CREATION_COMPLETE, function(e:FlexEvent):void {
+				PopUpManager.centerPopUp(loginWindow);
+			});
+			loginWindow.addEventListener("login", function(e:Event):void {
+				PopUpManager.removePopUp(loginWindow);
+				thisapp.removeEventListener(ResizeEvent.RESIZE, onResize);
+				
+				onReload();
+			});
+			thisapp.addEventListener(ResizeEvent.RESIZE, onResize);
+		}
 
 	]]>
 </fx:Script>
@@ -621,7 +632,7 @@
 		        <mx:Spacer width="100%"/>
 				<mx:Button label="Browse" click="onClickBrowse(event);" enabled="{dataGrid.selectedItems.length != 0}" icon="{copyIcon}"/>				
 			</s:HGroup>
-			<mx:Button label="Reload" click="onReloadAubonbeurre()" icon="@Embed(source='/icons/edit-undo.png')" />
+			<mx:Button label="Reload" click="onReload()" icon="@Embed(source='/icons/edit-undo.png')" />
 			<mx:Button id="removeBtn" icon="@Embed(source='/media/icon_addlink.png')" label="Remove"
 				click="onRemoveClick(event)" visible="{superuser}" includeInLayout="{superuser}"/>
 	        <mx:HRule width="100%"/>

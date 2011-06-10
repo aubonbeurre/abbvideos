@@ -30,7 +30,6 @@ package components
 		public function download_stream(m:Movie):void {
 			_s3Dict[m] = new S3();
 			_s3Dict[m]._m = m;
-			_s3Dict[m]._mindex = -1;
 			_s3Dict[m]._mstream = m.openDownloadStreamAsync();
 			
 			for each(var err:String in S3.s3errors) {
@@ -40,12 +39,7 @@ package components
 			_s3Dict[m].addEventListener(ProgressEvent.PROGRESS, _onFileProgress);
 			_s3Dict[m].addEventListener(AWSS3Event.OBJECT_RETRIEVED_STREAM, _onFileDownloadedStream);
 			
-			if(m.parts) {
-				_s3Dict[m]._mindex = 0;
-				_s3Dict[m].getObjectStream("aubonbeurre", m.parts[0].key, _s3Dict[m]._mstream);
-			}
-			else
-				_s3Dict[m].getObjectStream("aubonbeurre", m.mp4.key, _s3Dict[m]._mstream);
+			_s3Dict[m].getObjectStream(S3.mybucket, m.mp4.key, _s3Dict[m]._mstream);
 		}
 
 		public function queue():Array {
@@ -59,29 +53,13 @@ package components
 		private function _onFileProgress(e:ProgressEvent):void
 		{
 			var m:Movie = e.currentTarget._m;
-			var mindex:int = e.currentTarget._mindex;
-			if(mindex != -1) {
-				e = e.clone() as ProgressEvent;
-				for(var i:int = 0; i < mindex; ++i) {
-					e.bytesLoaded += m.parts[i].size;					
-				}
-				e.bytesTotal = m.mp4.size;
-			}
 			m.dispatchEvent(e);
 		}
 		
 		private function _onFileDownloadedStream(e:AWSS3Event):void
 		{
 			var m:Movie = e.currentTarget._m;
-			var mindex:int = e.currentTarget._mindex;
-			
-			if(mindex != -1 && mindex+1 < m.parts.length) {
-				mindex += 1;
-				e.currentTarget._mindex = mindex;
-				_s3Dict[m].getObjectStream("aubonbeurre", m.parts[mindex].key, _s3Dict[m]._mstream);
-				return;
-			}
-			
+
 			delete _s3Dict[m];
 			
 			if(OnFileDownloaded != null)

@@ -30,7 +30,6 @@ package components
 		public var mp4:MetaS3Key;
 		public var png:MetaS3Key;
 		public var listing:Object;
-		public var parts:Vector.<S3Object>;
 
 		[Bindable]
 		public var thumbnail:String;
@@ -313,26 +312,6 @@ package components
 			return null;
 		}
 		
-		public function finds3parts(s3objects:Vector.<S3Object>, s:String):Number {
-			parts = new Vector.<S3Object>();
-			var r:RegExp = /^(?P<movie>\w+\.[A-Za-z0-9]+)_(?P<suffix>\d+)$/;
-			var size:Number = 0;
-			for each(var o:S3Object in s3objects) {
-				var a:Array = r.exec(o.key);
-				if(a && a["movie"] == s) {
-					trace(o.key + ": " + int(a["suffix"]).toString());
-					parts.push(o);
-					size += o.size;
-				}
-			}
-			parts.sort(function(a:S3Object, b:S3Object):Number {
-				var a_ind:int = int(r.exec(a.key)["suffix"]);
-				var b_ind:int = int(r.exec(b.key)["suffix"]);
-				return a_ind < b_ind ? -1 : (a_ind > b_ind ? 1 : 0);
-			});
-			return size;
-		}
-		
 		static public function getAllValidTxt(s3objects:Vector.<S3Object>):Vector.<S3Object> {
 			var result:Vector.<S3Object> = new Vector.<S3Object>();
 			
@@ -433,16 +412,9 @@ package components
 			mp4 = finds3(s3objects, base + '.m4v');
 			if(mp4 == null)
 				mp4 = finds3(s3objects, base + '.mp4');
-			if(mp4 == null) {
-				mp4 = finds3(s3objects, base + '.m4v_000');
-				if(mp4) {
-					mp4.size = finds3parts(s3objects, base + '.m4v');
-				}
-			}
 			png = finds3(s3objects, base + '.mpg.png');
 			if(png == null)
 				png = finds3(s3objects, base + '.nuv.png');
-			//thumbnail = s3.getTemporaryObjectURL("aubonbeurre", png.key, 3600 * 24);		
 
 			var pattern1:RegExp = /(.*)[\s]=[\s](.*)/i;
 			var pattern2:RegExp = /(.*)[\s]=/i;

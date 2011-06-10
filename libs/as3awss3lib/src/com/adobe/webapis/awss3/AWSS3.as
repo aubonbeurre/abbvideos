@@ -48,6 +48,7 @@ package com.adobe.webapis.awss3
 	import flash.net.URLRequest;
 	import flash.net.URLRequestHeader;
 	import flash.net.URLStream;
+	import flash.net.URLVariables;
 	import flash.utils.ByteArray;
 	import flash.utils.IDataOutput;
 	
@@ -69,6 +70,9 @@ package com.adobe.webapis.awss3
 		public var accessKey:String;
 		public var secretAccessKey:String;
 		public var secretAccessKeyBytes:ByteArray;
+		public var secure:Boolean;
+		private var endpoint:String;
+		private var service_path:String;
 		private var dateFormatter:DateFormatter;
 		private var s3ns:Namespace = new Namespace("http://s3.amazonaws.com/doc/2006-03-01/");
 		private static const AMAZON_ENDPOINT:String = "s3.amazonaws.com";
@@ -76,10 +80,13 @@ package com.adobe.webapis.awss3
 		private var md5:MD5;
 		private var httpResponseCode:uint;
 
-		public function AWSS3(accessKey:String, secretAccessKey:String)
+		public function AWSS3(accessKey:String, secretAccessKey:String, secure:Boolean=true, endpoint:String=AMAZON_ENDPOINT, service_path:String="")
 		{
 			this.accessKey = accessKey;
 			this.secretAccessKey = secretAccessKey;
+			this.secure = secure;
+			this.endpoint = endpoint;
+			this.service_path = service_path;
 			this.secretAccessKeyBytes = new ByteArray();
 			this.secretAccessKeyBytes.writeUTFBytes(this.secretAccessKey);
 
@@ -146,13 +153,17 @@ package com.adobe.webapis.awss3
 					ae.data = objects;
 					dispatchEvent(ae);
 				});
-			if (prefix != null) bucketName += "";
-			var url:String = "/" + escape(bucketName);
-			if(marker)
-				url += "&marker="+encodeURIComponent(marker);
-				
-			var req:URLRequest = getURLRequest("GET", url);
-			stream.load(req);
+			bucketName = escape(bucketName);
+			var variables:URLVariables;
+			if (prefix != null) {
+				variables = new URLVariables();
+				variables.prefix = prefix;
+				variables.maxkeys = "1000";
+				variables.delimiter = "/";
+			}
+			
+			var req:URLRequest = getURLRequest("GET", "/" + bucketName + "/", null, null, variables);			
+			stream.load(req);			
 		}
 
 		public function createNewBucket(bucketName:String):void
@@ -171,6 +182,12 @@ package com.adobe.webapis.awss3
 					{
 						ae = new AWSS3Event(AWSS3Event.ERROR);
 						ae.data = "This bucket name is not unique. Bucket names must be unique across all of S3.";
+						dispatchEvent(ae);
+					}
+					else
+					{
+						ae = new AWSS3Event(AWSS3Event.ERROR);
+						ae.data = "Unknown status " + e.status.toString() + " in createNewBucket";
 						dispatchEvent(ae);
 					}
 				});
@@ -196,6 +213,12 @@ package com.adobe.webapis.awss3
 						ae.data = "Only empty buckets can be deleted.";
 						dispatchEvent(ae);
 					}
+					else
+					{
+						ae = new AWSS3Event(AWSS3Event.ERROR);
+						ae.data = "Unknown status " + e.status.toString() + " in deleteBucket";
+						dispatchEvent(ae);
+					}
 				});
 			var req:URLRequest = getURLRequest("DELETE", "/" + escape(bucketName));			
 			stream.load(req);			
@@ -211,6 +234,12 @@ package com.adobe.webapis.awss3
 					if (e.status == 204)
 					{
 						ae = new AWSS3Event(AWSS3Event.OBJECT_DELETED);
+						dispatchEvent(ae);
+					}
+					else
+					{
+						ae = new AWSS3Event(AWSS3Event.ERROR);
+						ae.data = "Unknown status " + e.status.toString() + " in deleteObject";
 						dispatchEvent(ae);
 					}
 				});
@@ -320,14 +349,19 @@ package com.adobe.webapis.awss3
 			stream.load(req);			
 		}
 
-		public function getTemporaryObjectURL(bucketName:String, objectName:String, timeValue:Number, secure:Boolean = true):String
+		public function getTemporaryObjectURL(bucketName:String, objectName:String, timeValue:Number):String
 		{
 			var ms:Number = new Date().valueOf();
 			var s:Number = Math.round(ms / 1000);
 			s += timeValue;
 			var authString:String = getAuthenticationString("GET", String(s), "/" + escape(bucketName) + "/" + escape(objectName));
 			var url:String = (secure) ? "https" : "http";
-			url += "://" + AMAZON_ENDPOINT + "/" + escape(bucketName) + "/" + escape(objectName) + "?AWSAccessKeyId="+this.accessKey+"&Expires="+s+"&Signature="+encodeURIComponent(authString);
+
+			if(this.endpoint != AMAZON_ENDPOINT) {
+				url += "://" + this.endpoint + this.service_path + "/" + escape(bucketName) + "/" + escape(objectName) + "?AWSAccessKeyId="+this.accessKey+"&Expires="+s+"&Signature="+encodeURIComponent(authString);
+			} else {
+				url += "://" + bucketName + "." + this.endpoint + this.service_path + "/" + escape(objectName) + "?AWSAccessKeyId="+this.accessKey+"&Expires="+s+"&Signature="+encodeURIComponent(authString);
+			}
 			return url;
 		}
 
@@ -345,17 +379,28 @@ package com.adobe.webapis.awss3
 					var ae:AWSS3Event;
 					if (httpResponseCode == 403)
 					{
-						ae = new AWSS3Event(AWSS3Event.REQUEST_FORBIDDEN);
+						ae = new AWSS3Event(AWSS3Event.ERROR);
 						message = getMessage(getDataFromStream(e.target as URLStream));
-						if (message != null) ae.data = message;
+						ae.data = "Forbidden";
+						if (message != null) ae.data += ": " + message;
 						dispatchEvent(ae);
+						e.stopImmediatePropagation();
 					}
 					else if (httpResponseCode != 0 && httpResponseCode > 299 && httpResponseCode != 409)
 					{
 						ae = new AWSS3Event(AWSS3Event.ERROR);
 						message = getMessage(getDataFromStream(e.target as URLStream));
-						if (message != null) ae.data = message;
-						dispatchEvent(ae);						
+						ae.data = "Error code " + httpResponseCode.toString();
+						if (message != null) ae.data += ": " + message;
+						dispatchEvent(ae);
+						e.stopImmediatePropagation();
+					}
+					else if (httpResponseCode != 200 && httpResponseCode != 204)
+					{
+						ae = new AWSS3Event(AWSS3Event.ERROR);
+						ae.data = "Unknown status " + httpResponseCode.toString() + " in getURLStream";
+						dispatchEvent(ae);
+						e.stopImmediatePropagation();
 					}
 				});
 
@@ -385,38 +430,30 @@ package com.adobe.webapis.awss3
 			return null;
 		}
 
-		private function getURLRequest(method:String, resource:String, contentType:String = null, hash:String = null, secure:Boolean = true):URLRequest
+		private function getURLRequest(method:String, resource:String, contentType:String = null, hash:String = null, variables:URLVariables = null):URLRequest
 		{
 			var protocol:String = (secure) ? "https" : "http";
-			var host:String = AMAZON_ENDPOINT;
-			var sign_rsrc:String = resource;
-			
-			/*if(host.indexOf("amazon") != -1) {
-				if(resource.length > 1 && resource.substr(0, 1) == '/') {
-					var ind:int = resource.substr(1).indexOf('/');
-					var bucket:String;
-					if(ind == -1)
-						bucket = resource.substr(1);
-					else
-						bucket = resource.substr(1, ind-1);
-					trace(bucket);
-					host = bucket + "." + AMAZON_ENDPOINT;
-					resource = resource.substr(bucket.length+1);
-					if(resource.length == 0)
-						resource = '/';
-				}
-			}*/
-			
-			var req:URLRequest = new URLRequest(protocol + "://" + host + resource);
-
-			if(resource.indexOf("&") != -1)
-				resource = resource.substr(0, resource.indexOf("&"));
+			var endpoint:String = this.endpoint;
+			var auth_resource:String = resource;
+			var isAmazon:Boolean = false;
+			if(endpoint == AMAZON_ENDPOINT && resource != "/") {
+				var paths:Array = resource.split("/");
+				endpoint = paths[1] + "." + AMAZON_ENDPOINT;
+				resource = resource.substr(paths[1].length + 1);
+				if(resource == "")
+					resource = "/";
+				isAmazon = true;
+			}
+			var url:String = protocol + "://" + endpoint + this.service_path + resource + getEscapeVariables(variables);
+			var req:URLRequest = new URLRequest(url);
 			req.cacheResponse = false;
 			req.useCache = false;
 			req.method = method;
 			var dateString:String = getDateString(new Date());
 			var dateHeader:URLRequestHeader = new URLRequestHeader("Date", dateString);
-			var authHeader:URLRequestHeader = new URLRequestHeader("Authorization", getAuthenticationHeader(method, dateString, sign_rsrc, contentType, hash));
+			
+			var authHeader:URLRequestHeader = new URLRequestHeader("Authorization",
+				getAuthenticationHeader(method, dateString, auth_resource, contentType, hash, variables, isAmazon));
 			req.requestHeaders.push(dateHeader);
 			req.requestHeaders.push(authHeader);
 			return req;
@@ -438,21 +475,41 @@ package com.adobe.webapis.awss3
 												 dateString:String,
 												 resource:String,
 												 contentType:String = null,
-												 hash:String = null):String
+												 hash:String = null,
+												 variables:URLVariables=null,
+												 isAmazon:Boolean=false):String
 		{
-			return ("AWS " + this.accessKey + ":" + getAuthenticationString(verb, dateString, resource, contentType, hash));
+			return ("AWS " + this.accessKey + ":" + getAuthenticationString(verb, dateString, resource, contentType, hash, variables, isAmazon));
+		}
+		
+		static private function getEscapeVariables(variables:URLVariables):String {
+			if(variables == null)
+				return "";
+			var res:String = "?";
+			var keys:Vector.<String> = new Vector.<String>();
+			for(var k:String in variables) {
+				var v:String = variables[k];
+				if(k == "maxkeys")
+					k = "max-keys";
+				keys.push(k + "=" + encodeURIComponent(v));
+			}
+			res += keys.join("&");
+			return res;
 		}
 
 		private function getAuthenticationString(verb:String,
 												 dateString:String,
 												 resource:String,
 												 contentType:String = null,
-												 hash:String = null):String
+												 hash:String = null,
+												 variables:URLVariables = null,
+												 isAmazon:Boolean=false):String
 		{
 			var toSign:String = verb + "\n";
 			toSign += (hash != null) ? hash + "\n" : "\n";
 			toSign += (contentType != null) ? contentType + "\n" : "\n";
-			toSign += dateString + "\n" + resource;
+			toSign += dateString + "\n" + this.service_path + resource;
+			
 			var toSignBytes:ByteArray = new ByteArray();
 			toSignBytes.writeUTFBytes(toSign);			
 			var hmacBytes:ByteArray = hmac.compute(secretAccessKeyBytes, toSignBytes);
