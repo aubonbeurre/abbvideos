@@ -1,3 +1,5 @@
 bin-debug
 bin-release
 .settings
+.DS_Store
+*~
