@@ -19,7 +19,9 @@ package components
 		];
 
 		public function S3() {
-			super(this.myaccessKey, this.mysecretAccessKey);
+			var accessKey:String = S3.myaccessKey;
+			var secretAccessKey:String = S3.mysecretAccessKey;
+			super(accessKey, secretAccessKey);
 		}
 
 		public function delete_movie(m:Movie):void { // AWSS3Event.OBJECT_DELETED

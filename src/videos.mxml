@@ -15,6 +15,9 @@
 <fx:Script>
 	<![CDATA[
 		import air.update.ApplicationUpdaterUI;
+		import air.update.events.DownloadErrorEvent;
+		import air.update.events.StatusFileUpdateErrorEvent;
+		import air.update.events.StatusUpdateErrorEvent;
 		import air.update.events.UpdateEvent;
 		
 		import com.adobe.net.MimeTypeMap;
@@ -216,11 +219,26 @@
 			appUpdater.updateURL = "http://aubonbeurre.github.com/abbvideos/update.xml"; // Server-side XML file describing update
 			appUpdater.isCheckForUpdateVisible = false; // We won't ask permission to check for an update
 			appUpdater.addEventListener(UpdateEvent.INITIALIZED, onUpdate); // Once initialized, run onUpdate
+			appUpdater.addEventListener(DownloadErrorEvent.DOWNLOAD_ERROR, onUpdateError1); // If something goes wrong, run onError
+			appUpdater.addEventListener(StatusFileUpdateErrorEvent.FILE_UPDATE_ERROR, onUpdateError2); // If something goes wrong, run onError
+			appUpdater.addEventListener(StatusUpdateErrorEvent.UPDATE_ERROR, onUpdateError3); // If something goes wrong, run onError
 			appUpdater.addEventListener(ErrorEvent.ERROR, onUpdateError); // If something goes wrong, run onError
 			appUpdater.initialize(); // Initialize the update framework
 		}
 	
 		private function onUpdateError(event:ErrorEvent):void {
+			Alert.show(event.toString());
+		}
+		
+		private function onUpdateError1(event:DownloadErrorEvent):void {
+			Alert.show(event.toString());
+		}
+		
+		private function onUpdateError2(event:StatusFileUpdateErrorEvent):void {
+			Alert.show(event.toString());
+		}
+		
+		private function onUpdateError3(event:StatusUpdateErrorEvent):void {
 			Alert.show(event.toString());
 		}
 		
@@ -544,6 +562,17 @@
 			
 			var onResize:Function = function(e:ResizeEvent):void {
 				PopUpManager.centerPopUp(loginWindow);
+				
+				var accessKey:String = settings.getsetting("abb.aws.accessKey");
+				var secretKey:String = settings.getsetting("abb.aws.secretKey");
+				var bucketName:String = settings.getsetting("abb.aws.bucketName");
+				
+				if(accessKey)
+					loginWindow.accessKey.text = accessKey;
+				if(secretKey)
+					loginWindow.secretKey.text = secretKey;
+				if(bucketName)
+					loginWindow.bucketName.text = bucketName;
 			};
 			
 			var loginWindow:LoginForm =
@@ -555,7 +584,14 @@
 				PopUpManager.removePopUp(loginWindow);
 				thisapp.removeEventListener(ResizeEvent.RESIZE, onResize);
 				
+				S3.myaccessKey = loginWindow.accessKey.text;
+				S3.mysecretAccessKey = loginWindow.secretKey.text;
+				S3.mybucket = loginWindow.bucketName.text;
 				onReload();
+				
+				settings.setsetting("abb.aws.accessKey", S3.myaccessKey);
+				settings.setsetting("abb.aws.secretKey", S3.mysecretAccessKey);
+				settings.setsetting("abb.aws.bucketName", S3.mybucket);
 			});
 			thisapp.addEventListener(ResizeEvent.RESIZE, onResize);
 		}

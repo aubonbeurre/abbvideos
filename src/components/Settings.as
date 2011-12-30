@@ -53,8 +53,6 @@ package components
 		public function getsetting(name:String):String
 		{
 		    // start a transaction
-			db.begin();
-
 		    var dbStatement:SQLStatement  = new SQLStatement();
 		    dbStatement.sqlConnection = db;
 		    dbStatement.parameters[":name"] = name;
@@ -85,6 +83,8 @@ package components
 		    dbStatement.parameters[":value"] = value;
 			dbStatement.text = "INSERT INTO settings (name, value) VALUES(:name, :value)";
     		dbStatement.execute();
+
+			db.commit();
 		}
 
 		public function deletesettings():void
@@ -96,6 +96,8 @@ package components
 		    dbStatement.sqlConnection = db;
 			dbStatement.text = "DELETE FROM settings";
     		dbStatement.execute();
+
+			db.commit();
 		}
 
 		 public function setAuthentication(uname:String, pword:String):void {

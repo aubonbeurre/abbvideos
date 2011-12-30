@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<application xmlns="http://ns.adobe.com/air/application/2.6">
+<application xmlns="http://ns.adobe.com/air/application/3.1">
 
 <!-- Adobe AIR Application Descriptor File Template.
 
@@ -24,17 +24,14 @@
 	<name>ABBVideos</name>
 
 	<!-- An application version designator (such as "v1", "2.5", or "Alpha 1"). Required. -->
-	<version>v1.5.0</version>
-
-	<!-- An application version designator (such as "v1", "2.5", or "Alpha 1"). Required. -->
-	<versionNumber>1.5.0</versionNumber>
+	<versionNumber>1.5.2</versionNumber>
 
 	<!-- Description, displayed in the AIR application installer.
 	     May have multiple values for each language. See samples or xsd schema file. Optional. -->
 	<description>ABB recorded videos</description>
 
 	<!-- Copyright information. Optional -->
-	<copyright>aubonbeurre technologies 2008</copyright>
+	<copyright>aubonbeurre 2008-2011</copyright>
 
 	<!-- Settings for the application's initial window. Required. -->
 	<initialWindow>
